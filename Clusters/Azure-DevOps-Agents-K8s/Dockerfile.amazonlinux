@@ -1,0 +1,89 @@
+# Description: Dockerfile for Amazon Linux based Azure DevOps Agent
+# Contains: Node.js, SDKMAN, Java, Docker, Maven, Sonar Scanner, yamllint
+
+# Created By: Sherif Emad
+FROM amazonlinux:latest
+
+####################################
+# Change shell to login mode to load SDKMAN properly
+SHELL ["/bin/bash", "-c", "-l"]
+
+####################################
+# Set working Directory
+WORKDIR /azp
+
+####################################
+# Copy start script and certificate
+COPY start.sh scb-ca-cert.pem /tmp/
+
+####################################
+# Move Start Script To the Working Directory
+RUN mv /tmp/start.sh . \
+    && chmod +x start.sh \
+    ####################################
+    # Install Dependencies
+    && yum update -y \
+    &&  yum install -y --setopt=install_weak_deps=False \
+    ca-certificates wget unzip zip gzip bzip2 tar jq git vim gettext gnupg findutils libicu \
+    ####################################
+    # Install Node.js
+    && curl -fsSL https://rpm.nodesource.com/setup_18.x | bash - \
+    &&  yum install -y --setopt=install_weak_deps=False nodejs \
+    ####################################
+    # Install SDKMAN and Java
+    && curl -s "https://get.sdkman.io" | bash \
+    && source "$HOME/.sdkman/bin/sdkman-init.sh" \
+    && sdk version \
+    && sdk list java \
+    && sdk install java 21.0.3-zulu \
+    && echo "export JAVA_HOME_21_X64=/root/.sdkman/candidates/java/21.0.3-zulu" >> ~/.bashrc \
+    && echo "export JAVA_HOME=/root/.sdkman/candidates/java/21.0.3-zulu" >> ~/.bashrc \
+    && echo "export PATH=\$JAVA_HOME/bin:\$PATH" >> ~/.bashrc \
+    && source ~/.bashrc \
+    ####################################
+    # Install Docker
+    && yum install -y --setopt=install_weak_deps=False docker \
+    && ln -s /usr/bin/docker /usr/local/bin/docker \
+    ####################################
+    # Install Maven
+    && curl -L https://archive.apache.org/dist/maven/maven-3/3.9.9/binaries/apache-maven-3.9.9-bin.tar.gz -o apache-maven.tar.gz \
+    && tar -xvzf apache-maven.tar.gz -C /opt/ \
+    && ln -s /opt/apache-maven-3.9.9/bin/mvn /usr/bin/mvn \
+    && mvn -v \
+    && rm -rf apache-maven.tar.gz \
+    ####################################
+    # Install Sonar Scanner
+    && wget https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-4.8.0.2856-linux.zip \
+    && unzip sonar-scanner-cli-4.8.0.2856-linux.zip \
+    && mv sonar-scanner-4.8.0.2856-linux /opt/sonar-scanner \
+    && rm -rf sonar-scanner-cli-4.8.0.2856-linux.zip \
+    && echo "export PATH=/opt/sonar-scanner/bin:\$PATH" >> ~/.bashrc \
+    && source ~/.bashrc \
+    ####################################
+    # Install yamllint
+    && yum -y install dnf-plugins-core \
+    && yum config-manager --add-repo https://dl.fedoraproject.org/pub/epel/9/Everything/x86_64/ \
+    && yum install -y --nogpgcheck yamllint \
+    ####################################
+    # Clean up
+    && yum clean packages -y \
+    && yum clean all \
+    && rpm -e --nodeps python3 wget
+
+####################################
+# Set Environment Variables
+ENV JAVA_HOME_21_X64=/root/.sdkman/candidates/java/21.0.3-zulu \
+    JAVA_HOME=/root/.sdkman/candidates/java/21.0.3-zulu \
+    PATH="$PATH:/opt/sonar-scanner/bin"
+
+####################################
+# Configure The Volumes Needed For The Build Agent
+VOLUME /src \
+    /var/run/docker.sock \
+    /root/.m2/repository \
+    /root/.sonarqube/conf/ \
+    /root/.gradle
+
+####################################
+# Start The Build Agent
+CMD ["./start.sh"]

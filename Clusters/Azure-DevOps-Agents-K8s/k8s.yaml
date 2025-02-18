@@ -1,0 +1,89 @@
+# Generic StatefulSet YAML for Azure DevOps Build Agent
+# This example provides a reusable template for deploying a build agent in Kubernetes.
+# It includes a ConfigMap for storing environment variables and a StatefulSet for managing the agent pods.
+
+---
+# ConfigMap for storing environment variables required by the build agent
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: build-agent-environment  # Name of the ConfigMap
+  namespace: build-agent  # Namespace where the ConfigMap is created
+
+data:
+  AZP_POOL: <AZP_POOL>  # Azure DevOps agent pool
+  AZP_TOKEN: <AZP_PAT>  # Personal Access Token (PAT) for authentication
+  AZP_URL: https://dev.azure.com/<ORG>  # Azure DevOps organization URL
+  AZP_WORK: /work  # Directory where agent workspaces are stored
+
+---
+# StatefulSet for deploying an Azure DevOps build agent in Kubernetes
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: build-agent  # Generic name for the StatefulSet
+  namespace: build-agent  # Namespace where the StatefulSet is deployed
+
+spec:
+  serviceName: build-agent  # Associated service name
+  selector:
+    matchLabels:
+      app: build-agent  # Label selector for identifying managed pods
+
+  replicas: 1  # Number of agent instances to deploy (adjust as needed)
+  template:
+    metadata:
+      labels:
+        app: build-agent  # Label to identify the pods
+
+    spec:
+      serviceAccountName: build-agent-service-account  # Service account for pod permissions
+      containers:
+        - name: build-agent  # Name of the container
+          securityContext:
+            privileged: true  # Run container in privileged mode if required
+          image: <IMAGE_NAME>:<IMAGE_TAG>  # Placeholder for build agent image
+          imagePullPolicy: Always  # Always pull the latest image
+
+          env:
+            - name: AZP_AGENT_NAME  # Assign the pod name as the agent name
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          envFrom:
+            - configMapRef:
+                name: build-agent-environment  # Load environment variables from ConfigMap
+
+          volumeMounts:
+            - name: dockersock  # Mount Docker socket for in-container builds
+              mountPath: /var/run/docker.sock
+            - name: agent-work  # Persistent volume for agent workspace
+              mountPath: /work
+            - name: maven-cache  # Persistent volume for Maven cache
+              mountPath: /root/.m2
+
+      volumes:
+        - name: dockersock
+          hostPath:
+            path: /var/run/docker.sock  # Mount host Docker socket inside the container
+
+  volumeClaimTemplates:
+    - metadata:
+        name: agent-work  # Persistent volume claim for agent workspace
+      spec:
+        accessModes: ["ReadWriteOnce"]  # Single node access mode
+        storageClassName: standard  # Generic storage class
+        resources:
+          requests:
+            storage: 6Gi  # Define required storage capacity
+
+    - metadata:
+        name: maven-cache  # Persistent volume claim for Maven cache
+      spec:
+        accessModes: ["ReadWriteOnce"]  # Single node access mode
+        storageClassName: standard  # Generic storage class
+        resources:
+          requests:
+            storage: 4Gi  # Define required storage capacity
+
+# This StatefulSet can be customized for various CI/CD use cases by modifying the environment variables and storage settings.
