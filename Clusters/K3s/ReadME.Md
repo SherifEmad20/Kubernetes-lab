@@ -138,8 +138,6 @@ hostnamectl set-hostname worker-1
    curl -sfL https://get.k3s.io | K3S_URL="https://<master_node_ip>:6443" K3S_TOKEN="<master_node_token>" sh -
    ```
 
-````
-
 2. **Check agent status**
    ```bash
    sudo systemctl status k3s-agent
@@ -173,4 +171,3 @@ sudo ufw allow 51821/udp
    ```bash
    export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
    ```
-````
